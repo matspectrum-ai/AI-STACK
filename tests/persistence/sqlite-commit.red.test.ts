@@ -27,14 +27,14 @@ describe("SQLite authoritative state store: commit, concurrency, ordering", () =
       const result = await env.store.commit(transitionCommit(0));
       expect(result.status).toBe("COMMITTED");
       if (result.status !== "COMMITTED") throw new Error("expected COMMITTED");
-      expect(result.receipt.stateRevision).toBe(1);
-      expect(result.receipt.journalSequence).toBe(1);
+      expect(Number(result.receipt.stateRevision)).toBe(1);
+      expect(Number(result.receipt.journalSequence)).toBe(1);
 
       const loaded = await env.store.loadRun({ runId: IDS.run });
       expect(loaded.status).toBe("FOUND");
       if (loaded.status !== "FOUND") throw new Error("expected FOUND");
-      expect(loaded.snapshot.state.revision).toBe(1);
-      expect(loaded.snapshot.journalHeadSequence).toBe(1);
+      expect(Number(loaded.snapshot.state.revision)).toBe(1);
+      expect(Number(loaded.snapshot.journalHeadSequence)).toBe(1);
     } finally {
       await env.cleanup();
     }
@@ -55,7 +55,7 @@ describe("SQLite authoritative state store: commit, concurrency, ordering", () =
       const result = await env.store.commit(stale);
       expect(result.status).toBe("CONFLICT");
       if (result.status !== "CONFLICT") throw new Error("expected CONFLICT");
-      expect(result.currentRevision).toBe(1);
+      expect(Number(result.currentRevision)).toBe(1);
       expect(readRawCounts(env.databasePath)).toEqual(before);
     } finally {
       await env.cleanup();
@@ -89,8 +89,8 @@ describe("SQLite authoritative state store: commit, concurrency, ordering", () =
       const loaded = await env.store.loadRun({ runId: IDS.run });
       expect(loaded.status).toBe("FOUND");
       if (loaded.status !== "FOUND") throw new Error("expected FOUND");
-      expect(loaded.snapshot.state.revision).toBe(1);
-      expect(loaded.snapshot.journalHeadSequence).toBe(1);
+      expect(Number(loaded.snapshot.state.revision)).toBe(1);
+      expect(Number(loaded.snapshot.journalHeadSequence)).toBe(1);
     } finally {
       await env.cleanup();
     }
@@ -114,7 +114,7 @@ describe("SQLite authoritative state store: commit, concurrency, ordering", () =
       const loaded = await env.store.loadRun({ runId: IDS.run });
       expect(loaded.status).toBe("FOUND");
       if (loaded.status !== "FOUND") throw new Error("expected FOUND");
-      expect(loaded.snapshot.state.revision).toBe(0);
+      expect(Number(loaded.snapshot.state.revision)).toBe(0);
     } finally {
       await env.cleanup();
     }
@@ -386,7 +386,7 @@ describe("SQLite authoritative state store: commit, concurrency, ordering", () =
       if (loaded.status !== "FOUND") throw new Error("expected FOUND");
       expect(loaded.snapshot.state.retryCounters.implementation).toBe(1);
       expect(loaded.snapshot.state.activeNodeIds).toContain(IDS.implementation);
-      expect(loaded.snapshot.state.revision).toBe(2);
+      expect(Number(loaded.snapshot.state.revision)).toBe(2);
     } finally {
       await env.cleanup();
     }
