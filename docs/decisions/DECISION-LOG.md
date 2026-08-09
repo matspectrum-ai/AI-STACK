@@ -69,7 +69,28 @@ Research: `docs/research/OMP-INTEGRATION.md`
 
 The proposed boundary is `Engineering Graph -> ExecutorPort -> OmpSdkExecutorAdapter -> OMP SDK`, with RPC as a replaceable adapter boundary when process isolation or cross-language operation is required.
 
-D-010 MUST NOT move to ACCEPTED until the ExecutorPort and adapter behaviors are specified, executable tests are observed RED, and an implementation passes those tests without leaking OMP authority into the domain kernel.
+D-010 MUST NOT move to ACCEPTED until the generic `ExecutorPort`, durable orchestration boundary, and OMP-specific adapter behaviors are separately specified, observed RED, and implemented without leaking OMP authority into graph state.
+
+### D-015 — Journal-as-outbox durable orchestration
+
+Status: PROPOSED
+RFC: `docs/architecture/RFC/RFC-003-DURABLE-EXECUTION-ORCHESTRATION.md`
+Contract: `docs/contracts/EXECUTION-ORCHESTRATION.md`
+
+The proposed orchestration boundary treats the accepted authoritative graph journal as a durable outbox. A deterministic projector derives durable `ExecutionIntent` records from committed journal entries plus the exact immutable graph definition. Executor dispatch is forbidden until intent and claim state are durable.
+
+This removes the unsafe `graph commit -> direct executor call` crash gap. Projection checkpoint and derived intents must commit atomically in the execution store, and journal replay must recreate missing intents idempotently after interruption.
+
+D-015 MUST NOT move to ACCEPTED until the pure projector, execution-store, claim/lease, restart, and dispatcher suites defined by ORCH-001..056 have executable RED/GREEN evidence.
+
+### D-016 — At-least-once dispatch with stable execution identity
+
+Status: PROPOSED
+RFC: `docs/architecture/RFC/RFC-003-DURABLE-EXECUTION-ORCHESTRATION.md`
+
+AI-STACK proposes at-least-once orchestration at the executor-dispatch boundary rather than claiming impossible generic exactly-once external execution. Every execution attempt has a stable `ExecutionId`; uncertain/replayed dispatch reuses that identity. A conforming executor adapter must support idempotent start semantics and/or status reconciliation sufficient to prevent uncontrolled duplicate work.
+
+D-016 MUST NOT move to ACCEPTED until generic dispatcher tests prove stable-identity replay/reconciliation and the eventual OMP adapter proves the required semantics against OMP behavior.
 
 ## Open decisions
 
@@ -78,7 +99,8 @@ D-010 MUST NOT move to ACCEPTED until the ExecutorPort and adapter behaviors are
 - D-011: Policy evaluation and permissions implementation mechanism
 - D-012: Graph DSL shape and relationship to Spec Kit semantics
 - D-014: Canonical operation serialization and digest generation
-- D-015: Orchestration dispatch boundary between committed graph state and executor activation
+- D-017: Concrete durable `ExecutionStore` backend and schema
+- D-018: Immutable graph-definition registry persistence/lookup mechanism
 
 ## Phase 1 domain contracts
 
@@ -153,6 +175,23 @@ TDD evidence:
 - GREEN: run `31296969993` — domain tests, persistence tests, strict typecheck, and enforcement passed;
 - post-refactor GREEN: run `31297024859` — complete suite passed again.
 
-OMP execution, policy-engine implementation, canonical digest generation, evidence payload integrity, and orchestration dispatch remain outside the accepted Phase 4 boundary.
+## Phase 5 durable orchestration contracts
+
+Phase 5 specifies, but does not implement:
+
+- journal-as-outbox execution projection;
+- stable execution identity and explicit attempt identity;
+- immutable `ExecutionIntent` records;
+- projection checkpoints with atomic intent/checkpoint persistence;
+- `ExecutionStore` port;
+- claim/lease semantics;
+- at-least-once dispatch semantics;
+- generic `ExecutorPort` start/reconciliation contract;
+- terminal result persistence without direct graph authority;
+- exact graph-definition registry lookup;
+- crash/restart recovery matrix;
+- ORCH-001..056 component-owned acceptance behaviors.
+
+No production projector, execution-store adapter, dispatcher, graph registry, or OMP executor adapter is introduced in Phase 5.
 
 Each open or proposed decision must be resolved by RFC/ADR with alternatives, constraints, tests, and acceptance evidence before implementation authority expands.
