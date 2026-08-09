@@ -162,8 +162,7 @@ export interface TransitionRequest {
   readonly expectedStateRevision: StateRevision;
 }
 
-export interface TransitionDecision {
-  readonly transitionId: TransitionId;
+export interface TransitionVerdict {
   readonly runId: RunId;
   readonly graphId: GraphId;
   readonly graphVersion: string;
@@ -175,6 +174,11 @@ export interface TransitionDecision {
   readonly boundArtifactIds: readonly ArtifactId[];
   readonly boundApprovalIds: readonly ApprovalId[];
   readonly boundEvidenceIds: readonly EvidenceId[];
+  readonly evaluatedStateRevision: StateRevision;
+}
+
+export interface TransitionDecision extends TransitionVerdict {
+  readonly transitionId: TransitionId;
   readonly stateRevisionBefore: StateRevision;
   readonly stateRevisionAfter?: StateRevision;
 }
@@ -334,7 +338,7 @@ export interface GraphKernel {
   evaluateTransition(
     request: TransitionRequest,
     context: TransitionEvaluationContext,
-  ): TransitionDecision;
+  ): TransitionVerdict;
   validateArtifactLineage(artifacts: readonly ArtifactRecord[]): readonly ReasonCode[];
   validateRetryPolicy(policy: RetryPolicy): readonly ReasonCode[];
   evaluateRetry(
