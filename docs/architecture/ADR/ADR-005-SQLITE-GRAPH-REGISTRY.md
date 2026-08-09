@@ -1,7 +1,8 @@
 # ADR-005 — SQLite as Initial Durable GraphDefinitionRegistry
 
-Status: PROPOSED
+Status: ACCEPTED
 Date: 2026-08-09
+Accepted in: Phase 9 — Graph Registry TDD
 Depends on:
 - `docs/contracts/GRAPH-DEFINITION-REGISTRY.md`
 - `contracts/graph-registry.ts`
@@ -12,28 +13,29 @@ The production journal projection path requires exact immutable lookup of the gr
 
 The registry needs durable write-once identity, exact lookup, concurrent registration safety, restart durability, and fail-closed decoding. It does not require a network service for the initial local OMP-oriented harness.
 
-## Decision proposal
+## Decision
 
 Use SQLite through Bun's built-in `bun:sqlite` driver as the first durable `GraphDefinitionRegistry` adapter.
 
-The registry is a separate adapter boundary. Its schema may reside in its own local database file for conformance and does not share transaction authority with `AuthoritativeStateStore` or `ExecutionStore`.
+The registry is a separate adapter boundary and uses its own local file in conformance. It does not share transaction authority with `AuthoritativeStateStore` or `ExecutionStore`.
 
-This ADR remains PROPOSED until a real file-backed adapter passes executable registry conformance tests.
-
-## Proposed logical schema
+## Logical schema v1
 
 Logical table `graph_definitions`:
 
 - `graph_id` text;
 - `graph_version` text;
-- `definition_json` versioned canonical execution-graph envelope;
+- `canonical_json` deterministic canonical representation used only for equality/conflict detection;
+- `definition_json` versioned envelope preserving the first registered representation for lookup;
 - primary key `(graph_id, graph_version)`.
 
 The production API has no update/delete operation.
 
+Keeping canonical equality separate from the first stored representation allows incidental collection reordering to replay idempotently without rewriting the originally registered immutable artifact.
+
 ## Transaction semantics
 
-Registration MUST use a serialized write transaction:
+Registration uses a serialized immediate write transaction:
 
 1. validate graph and execution metadata;
 2. derive canonical representation;
@@ -67,20 +69,41 @@ Rejected as acceptance evidence because it cannot prove restart durability or re
 
 Deferred until graph-definition coordination must span independent hosts.
 
-## Acceptance criteria
+## Acceptance evidence
 
-ADR-005 may move to ACCEPTED only when a real file-backed implementation proves:
+Phase 9 proved:
 
 - first registration and exact retrieval;
 - ORCH-053 exact-version lookup with no fallback;
-- invalid graph rejection;
+- ORCH-054 invalid graph rejection at the registry boundary;
 - canonical reorder replay;
 - conflicting same-identity rejection;
 - independent version coexistence;
 - close/reopen durability;
 - same-content and conflicting-content two-connection races;
-- corrupted persisted definition fails closed;
-- no SQLite/OMP/graph-state mutation authority leaks through the registry port.
+- corrupted persisted definition fail-closed;
+- no SQLite/OMP/graph-state mutation authority through the public registry port.
+
+TDD evidence:
+
+- clean RED: run `31298836779` — previously accepted suites remained green while registry tests/typecheck failed only because the contracted SQLite registry module did not exist;
+- GREEN: run `31298908373` — all suites, strict typecheck, and enforcement passed against the real file-backed adapter;
+- post-refactor GREEN: run `31298941526` — complete suite passed after SQLite row lookup/integrity decoding was isolated from the registry transaction flow.
+
+## Consequences
+
+Accepted:
+
+- exact immutable `graphId@graphVersion` lookup is now durable;
+- canonical equivalence is non-cryptographic and independent from D-014;
+- the journal projection runner can now resolve the exact graph version before projection.
+
+Not accepted by this ADR:
+
+- production journal projection runner/pump;
+- graph activation/latest-version semantics;
+- distributed registry coordination;
+- OMP integration.
 
 ## Revisit triggers
 
