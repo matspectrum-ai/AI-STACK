@@ -100,9 +100,12 @@ function markResultToDispatch(
 
 function recordResultToDispatch(
   executionId: ExecutionId,
-  result: Exclude<RecordExecutionResultResult, { status: "RECORDED" | "REPLAYED" }>,
+  result: RecordExecutionResultResult,
 ): DispatchResult {
   switch (result.status) {
+    case "RECORDED":
+    case "REPLAYED":
+      return unavailable(executionId, "INTEGRITY_ERROR");
     case "NOT_FOUND":
       return { status: "NOT_FOUND", executionId };
     case "STALE_LEASE":
