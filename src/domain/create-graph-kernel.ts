@@ -3,6 +3,7 @@ import type {
   ArtifactId,
   ArtifactRecord,
   EdgeDefinition,
+  EvidenceId,
   GateDefinition,
   GateEvaluationContext,
   GateId,
@@ -22,6 +23,13 @@ import type {
 
 function unique<T>(values: readonly T[]): T[] {
   return [...new Set(values)];
+}
+
+function withFallbackReason(
+  reasonCodes: readonly ReasonCode[],
+  fallback: ReasonCode,
+): readonly ReasonCode[] {
+  return reasonCodes.length > 0 ? reasonCodes : [fallback];
 }
 
 function referencedArtifacts(
@@ -56,7 +64,7 @@ function gateResult(
   reasonCodes: readonly ReasonCode[],
   options: {
     artifactIds?: readonly ArtifactId[];
-    evidenceIds?: GateResult["boundEvidenceIds"];
+    evidenceIds?: readonly EvidenceId[];
     approvalIds?: readonly ApprovalId[];
     inputRefs?: readonly string[];
   } = {},
@@ -146,7 +154,9 @@ function evaluateApprovalGate(
   }
 
   const current = matching.filter(
-    (record) => record.expiresAt === undefined || Date.parse(record.expiresAt) > Date.parse(context.now),
+    (record) =>
+      record.expiresAt === undefined ||
+      Date.parse(record.expiresAt) > Date.parse(context.now),
   );
 
   if (current.length === 0) {
@@ -157,9 +167,12 @@ function evaluateApprovalGate(
     });
   }
 
-  const independent = definition.requireIndependentApprover && context.subjectExecutorId
-    ? current.filter((record) => record.approverExecutorId !== context.subjectExecutorId)
-    : current;
+  const independent =
+    definition.requireIndependentApprover && context.subjectExecutorId
+      ? current.filter(
+          (record) => record.approverExecutorId !== context.subjectExecutorId,
+        )
+      : current;
 
   if (independent.length === 0) {
     return gateResult(definition.gateId, "FAIL", [definition.selfApprovalReason], {
@@ -186,7 +199,10 @@ function validateGraph(graph: GraphDefinition): readonly ReasonCode[] {
     errors.push("INVALID_GRAPH_DEFINITION");
   }
 
-  if (new Set(nodeIds).size !== nodeIds.length || new Set(edgeIds).size !== edgeIds.length) {
+  if (
+    new Set(nodeIds).size !== nodeIds.length ||
+    new Set(edgeIds).size !== edgeIds.length
+  ) {
     errors.push("INVALID_GRAPH_DEFINITION");
   }
 
@@ -270,7 +286,7 @@ function evaluateTransition(
     reasons.push("STALE_STATE_REVISION");
   }
 
-  if (!edge || (edge && !state.activeNodeIds.includes(edge.fromNodeId))) {
+  if (!edge || !state.activeNodeIds.includes(edge.fromNodeId)) {
     reasons.push("EDGE_NOT_ALLOWED");
   }
 
@@ -295,55 +311,75 @@ function evaluateTransition(
 
   if (target) {
     for (const kind of target.requiredArtifactKinds) {
-      const matches = runArtifacts.filter((artifact) => artifact.artifactKind === kind);
+      const matches = runArtifacts.filter(
+        (artifact) => artifact.artifactKind === kind,
+      );
       if (matches.length === 0) reasons.push(artifactReason(kind));
       else boundArtifactIds.push(...matches.map((artifact) => artifact.artifactId));
     }
   }
 
-  const requiredGates = unique([...(edge.gateIds ?? []), ...(target?.requiredGateIds ?? [])]);
+  const requiredGates = unique([
+    ...edge.gateIds,
+    ...(target?.requiredGateIds ?? []),
+  ]);
   const evaluatedGateResults: GateResult[] = [];
   const boundApprovalIds: ApprovalId[] = [];
-  const boundEvidenceIds = [] as GateResult["boundEvidenceIds"] extends readonly (infer T)[] ? T[] : never[];
+  const boundEvidenceIds: EvidenceId[] = [];
 
   for (const gateId of requiredGates) {
-    const result = context.gateResults.find((candidate) => candidate.gateId === gateId);
+    const result = context.gateResults.find(
+      (candidate) => candidate.gateId === gateId,
+    );
     if (!result) {
       reasons.push("GATE_INDETERMINATE");
       continue;
     }
+
     evaluatedGateResults.push(result);
     boundArtifactIds.push(...result.boundArtifactIds);
     boundApprovalIds.push(...result.boundApprovalIds);
     boundEvidenceIds.push(...result.boundEvidenceIds);
+
     if (result.outcome === "FAIL") {
-      reasons.push(...(result.reasonCodes.length > 0 ? result.reasonCodes : ["GATE_FAILED"]));
+      reasons.push(...withFallbackReason(result.reasonCodes, "GATE_FAILED"));
     } else if (result.outcome === "INDETERMINATE") {
-      reasons.push(...(result.reasonCodes.length > 0 ? result.reasonCodes : ["GATE_INDETERMINATE"]));
+      reasons.push(
+        ...withFallbackReason(result.reasonCodes, "GATE_INDETERMINATE"),
+      );
     }
   }
 
   const evaluatedPolicyResults: PolicyResult[] = [];
   let pauseForApproval = false;
+
   for (const policyId of requiredPolicyIds(edge, graph)) {
     const result = findPolicyResult(policyId, context.policyResults);
     if (!result) {
       reasons.push("POLICY_INDETERMINATE");
       continue;
     }
+
     evaluatedPolicyResults.push(result);
+
     if (result.outcome === "DENY") {
-      reasons.push(...(result.reasonCodes.length > 0 ? result.reasonCodes : ["POLICY_DENIED"]));
+      reasons.push(...withFallbackReason(result.reasonCodes, "POLICY_DENIED"));
     } else if (result.outcome === "INDETERMINATE") {
-      reasons.push(...(result.reasonCodes.length > 0 ? result.reasonCodes : ["POLICY_INDETERMINATE"]));
+      reasons.push(
+        ...withFallbackReason(result.reasonCodes, "POLICY_INDETERMINATE"),
+      );
     } else if (result.outcome === "REQUIRE_APPROVAL") {
       pauseForApproval = true;
-      reasons.push(...(result.reasonCodes.length > 0 ? result.reasonCodes : ["APPROVAL_REQUIRED"]));
+      reasons.push(
+        ...withFallbackReason(result.reasonCodes, "APPROVAL_REQUIRED"),
+      );
     }
   }
 
   const uniqueReasons = unique(reasons);
-  const hasDenyReason = uniqueReasons.some((reason) => reason !== "APPROVAL_REQUIRED");
+  const hasDenyReason = uniqueReasons.some(
+    (reason) => reason !== "APPROVAL_REQUIRED",
+  );
   const decision = hasDenyReason ? "DENY" : pauseForApproval ? "PAUSE" : "ALLOW";
 
   return {
@@ -358,7 +394,9 @@ function evaluateTransition(
   };
 }
 
-function validateArtifactLineage(artifacts: readonly ArtifactRecord[]): readonly ReasonCode[] {
+function validateArtifactLineage(
+  artifacts: readonly ArtifactRecord[],
+): readonly ReasonCode[] {
   const ids = new Set(artifacts.map((artifact) => artifact.artifactId));
   const parents = new Map<ArtifactId, readonly ArtifactId[]>(
     artifacts.map((artifact) => [artifact.artifactId, artifact.parentArtifactIds]),
@@ -376,6 +414,7 @@ function validateArtifactLineage(artifacts: readonly ArtifactRecord[]): readonly
   const hasCycle = (id: ArtifactId): boolean => {
     if (visiting.has(id)) return true;
     if (visited.has(id)) return false;
+
     visiting.add(id);
     for (const parent of parents.get(id) ?? []) {
       if (hasCycle(parent)) return true;
@@ -388,11 +427,16 @@ function validateArtifactLineage(artifacts: readonly ArtifactRecord[]): readonly
   for (const id of ids) {
     if (hasCycle(id)) return ["INVALID_ARTIFACT_LINEAGE"];
   }
+
   return [];
 }
 
 function validateRetryPolicy(policy: RetryPolicy): readonly ReasonCode[] {
-  if (!Number.isFinite(policy.maxAttempts) || !Number.isInteger(policy.maxAttempts) || policy.maxAttempts < 1) {
+  if (
+    !Number.isFinite(policy.maxAttempts) ||
+    !Number.isInteger(policy.maxAttempts) ||
+    policy.maxAttempts < 1
+  ) {
     return ["INVALID_GRAPH_DEFINITION"];
   }
   return [];
@@ -403,12 +447,17 @@ function evaluateRetry(
   policy: RetryPolicy,
   attemptsUsed: number,
 ): RetryDecision {
-  if (validateRetryPolicy(policy).length > 0 || !Number.isInteger(attemptsUsed) || attemptsUsed < 0) {
+  if (
+    validateRetryPolicy(policy).length > 0 ||
+    !Number.isInteger(attemptsUsed) ||
+    attemptsUsed < 0
+  ) {
     return { allowed: false, reasonCodes: ["INVALID_GRAPH_DEFINITION"] };
   }
 
   const reasonAllowed =
-    policy.allowedReasonCodes === undefined || policy.allowedReasonCodes.includes(failure.reasonCode);
+    policy.allowedReasonCodes === undefined ||
+    policy.allowedReasonCodes.includes(failure.reasonCode);
   const classAllowed = policy.allowedFailureClasses.includes(failure.failureClass);
 
   if (failure.retryability !== "RETRYABLE" || !classAllowed || !reasonAllowed) {
@@ -436,6 +485,7 @@ export function createGraphKernel(): GraphKernel {
     validateGraphReplacement(activated, proposed) {
       const proposedErrors = validateGraph(proposed);
       if (proposedErrors.length > 0) return proposedErrors;
+
       if (
         activated.graphId === proposed.graphId &&
         activated.graphVersion === proposed.graphVersion &&
@@ -443,6 +493,7 @@ export function createGraphKernel(): GraphKernel {
       ) {
         return ["INVALID_GRAPH_DEFINITION"];
       }
+
       return [];
     },
     evaluateGate(definition, context) {
