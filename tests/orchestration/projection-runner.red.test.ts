@@ -44,7 +44,7 @@ describe("durable journal projection runner", () => {
       expect(pending[0]?.intent.runId).toBe(IDS.run);
       expect(pending[0]?.intent.graphId).toBe(IDS.graph);
       expect(pending[0]?.intent.nodeId).toBe(IDS.implementation);
-      expect(pending[0]?.intent.sourceJournalSequence).toBe(1);
+      expect(Number(pending[0]?.intent.sourceJournalSequence)).toBe(1);
 
       const checkpoint = await env.execution.store.getCheckpoint({
         projectorId: RUNNER_PROJECTOR_ID,
