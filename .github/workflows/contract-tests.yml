@@ -1,0 +1,73 @@
+name: Contract Tests
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  domain-contracts:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: 1.3.14
+
+      - name: Install pinned direct dependencies
+        run: bun install
+
+      - name: Run domain tests
+        id: tests
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -o pipefail
+          bun test tests/domain 2>&1 | tee /tmp/domain-tests.log
+
+      - name: Run typecheck
+        id: typecheck
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -o pipefail
+          bun run check 2>&1 | tee /tmp/typecheck.log
+
+      - name: Enforce contract checks
+        if: always()
+        shell: bash
+        env:
+          TESTS_OUTCOME: ${{ steps.tests.outcome }}
+          TYPECHECK_OUTCOME: ${{ steps.typecheck.outcome }}
+        run: |
+          sanitize_file() {
+            local file="$1"
+            if [ -f "$file" ]; then
+              tail -n 20 "$file" \
+                | tr '\n' ' ' \
+                | sed -e 's/%/%25/g' -e 's/\r/%0D/g' -e 's/\n/%0A/g' \
+                | cut -c1-3000
+            fi
+          }
+
+          failed=0
+
+          if [ "$TESTS_OUTCOME" != "success" ]; then
+            echo "::error title=Domain tests failed::$(sanitize_file /tmp/domain-tests.log)"
+            failed=1
+          fi
+
+          if [ "$TYPECHECK_OUTCOME" != "success" ]; then
+            echo "::error title=Typecheck failed::$(sanitize_file /tmp/typecheck.log)"
+            failed=1
+          fi
+
+          if [ "$failed" -ne 0 ]; then
+            exit 1
+          fi

@@ -1,7 +1,8 @@
 # ADR-001 — Initial Runtime and Test Substrate
 
-Status: PROPOSED
+Status: ACCEPTED
 Date: 2026-08-09
+Accepted: 2026-08-09
 
 ## Context
 
@@ -11,9 +12,11 @@ The Engineering Graph domain must remain independent from OMP-specific types and
 
 ## Decision
 
-Use **TypeScript on Bun** as the initial v1 contract-test and runtime substrate, subject to the Phase 1 RED test proving the harness can be bootstrapped without violating domain boundaries.
+Use **TypeScript on Bun** as the initial v1 contract-test and runtime substrate.
 
 Use OMP through an AI-STACK-owned `ExecutorPort`. The first adapter may use the OMP TypeScript SDK in-process. OMP RPC remains the required alternative boundary for future process isolation or non-TypeScript hosts.
+
+The accepted toolchain baseline is pinned in `package.json`; CI setup actions are pinned to immutable commit SHAs.
 
 ## Scope of decision
 
@@ -78,7 +81,7 @@ Regardless of substrate:
 
 ## Consequences
 
-The initial repository test bootstrap should target Bun and TypeScript.
+The initial repository test and runtime substrate is Bun + TypeScript.
 
 Expected dependency direction:
 
@@ -101,14 +104,20 @@ Forbidden dependency:
 domain kernel ---> @oh-my-pi/pi-coding-agent
 ```
 
-## Acceptance criteria
+## Acceptance evidence
 
-ADR-001 may move to ACCEPTED when:
+The acceptance criteria were exercised in Phase 2:
 
-- contract-only TypeScript types can represent Phase 1 domain entities without OMP imports;
-- executable tests can be authored against those contracts;
-- the first test run is RED because domain behavior is absent, not because the specification is ambiguous;
-- Bun/TypeScript does not force a violation of the Engineering Graph contracts.
+1. `contracts/domain.ts` represents the Phase 1 domain using AI-STACK-owned strict TypeScript contracts and contains no OMP imports.
+2. Executable Bun tests were authored against `createGraphKernel(): GraphKernel` before `src/domain/create-graph-kernel.ts` existed.
+3. The RED baseline commit `c844d622c1d39c60639f529540e8b9ded77cc8a5` produced failing GitHub Actions run `31295904452` while the contracted implementation module was absent.
+4. The initial workflow did not retain enough stdout to prove that the missing module was the *only* failure in that first run. This observability gap was corrected before GREEN and is recorded rather than inferred away.
+5. After minimal implementation, diagnostic run `31296053662` proved the behavior tests passed while strict TypeScript still rejected five `ReasonCode` inference errors. The contracts/tests were not weakened; the implementation typing was fixed.
+6. GREEN run `31296085464` completed successfully for domain tests, strict typecheck, and enforcement.
+7. After cohesion refactoring, run `31296156440` again completed successfully, proving behavior-preserving refactor under the same contract suite.
+8. The pure domain implementation remains independent of OMP, persistence, shell execution, network I/O, and UI concerns.
+
+These observations are sufficient to accept TypeScript/Bun as the v1 substrate. They do not accept the OMP adapter design as implemented; that boundary requires its own RED/GREEN cycle.
 
 ## Revisit triggers
 
