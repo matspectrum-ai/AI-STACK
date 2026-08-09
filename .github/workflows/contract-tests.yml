@@ -8,7 +8,7 @@ permissions:
   contents: read
 
 jobs:
-  domain-contracts:
+  contract-tests:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -24,12 +24,20 @@ jobs:
         run: bun install
 
       - name: Run domain tests
-        id: tests
+        id: domain_tests
         continue-on-error: true
         shell: bash
         run: |
           set -o pipefail
           bun test tests/domain 2>&1 | tee /tmp/domain-tests.log
+
+      - name: Run persistence tests
+        id: persistence_tests
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -o pipefail
+          bun test tests/persistence 2>&1 | tee /tmp/persistence-tests.log
 
       - name: Run typecheck
         id: typecheck
@@ -43,23 +51,29 @@ jobs:
         if: always()
         shell: bash
         env:
-          TESTS_OUTCOME: ${{ steps.tests.outcome }}
+          DOMAIN_OUTCOME: ${{ steps.domain_tests.outcome }}
+          PERSISTENCE_OUTCOME: ${{ steps.persistence_tests.outcome }}
           TYPECHECK_OUTCOME: ${{ steps.typecheck.outcome }}
         run: |
           sanitize_file() {
             local file="$1"
             if [ -f "$file" ]; then
-              tail -n 20 "$file" \
+              tail -n 30 "$file" \
                 | tr '\n' ' ' \
                 | sed -e 's/%/%25/g' -e 's/\r/%0D/g' -e 's/\n/%0A/g' \
-                | cut -c1-3000
+                | cut -c1-4000
             fi
           }
 
           failed=0
 
-          if [ "$TESTS_OUTCOME" != "success" ]; then
+          if [ "$DOMAIN_OUTCOME" != "success" ]; then
             echo "::error title=Domain tests failed::$(sanitize_file /tmp/domain-tests.log)"
+            failed=1
+          fi
+
+          if [ "$PERSISTENCE_OUTCOME" != "success" ]; then
+            echo "::error title=Persistence tests failed::$(sanitize_file /tmp/persistence-tests.log)"
             failed=1
           fi
 
