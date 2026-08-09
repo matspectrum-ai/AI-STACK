@@ -208,6 +208,7 @@ export interface ApprovalPresentGateDefinition {
   readonly gateId: GateId;
   readonly gateType: "approval_present";
   readonly action: string;
+  readonly scope: string;
   readonly subject: SubjectSelector;
   readonly requireIndependentApprover: boolean;
   readonly missingReason: ReasonCode;
@@ -221,6 +222,7 @@ export interface GateEvaluationContext {
   readonly evidence: readonly EvidenceRecord[];
   readonly approvals: readonly ApprovalRecord[];
   readonly requestedByExecutorId: ExecutorId;
+  readonly subjectExecutorId?: ExecutorId;
   readonly now: string;
 }
 
