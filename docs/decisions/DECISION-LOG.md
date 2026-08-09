@@ -60,6 +60,18 @@ SQLite through Bun's built-in `bun:sqlite` driver is the accepted first local du
 
 Phase 4 accepted D-013 only after a real file-backed implementation passed the shared persistence conformance suite, including two independently opened store instances racing on the same expected revision and close/reopen durability.
 
+### D-017 — Initial durable ExecutionStore backend and recovery boundary
+
+Status: ACCEPTED
+ADR: `docs/architecture/ADR/ADR-004-SQLITE-EXECUTION-STORE.md`
+Contract: `docs/contracts/SQLITE-EXECUTION-STORE.md`
+
+SQLite through Bun's built-in `bun:sqlite` driver is the accepted first durable derived-orchestration `ExecutionStore` adapter. It uses an orchestration-owned schema, with Phase 7 conformance using a separate file from authoritative graph state so journal-as-outbox recovery does not depend on cross-store transactions.
+
+The accepted generic recovery refinement is `DurableExecutionStore.listRecoverable(now, limit)`, allowing expired `CLAIMED`/`RUNNING` work to be discovered and reclaimed using the same stable `ExecutionId` instead of creating a new attempt.
+
+Phase 7 accepted D-017 only after executable tests proved atomic projection/checkpoint persistence, idempotent projection replay, immutable intent content, live-lease exclusion, expired-lease reclaim, stale/expired lease rejection, real two-connection claim contention, terminal result immutability, close/reopen durability, and expired-work discovery. Post-refactor run `31298289515` remained fully green.
+
 ## Decisions under acceptance test
 
 ### D-010 — OMP integration boundary
@@ -79,9 +91,9 @@ Contract: `docs/contracts/EXECUTION-ORCHESTRATION.md`
 
 The proposed orchestration boundary treats the accepted authoritative graph journal as a durable outbox. A deterministic projector derives durable `ExecutionIntent` records from committed journal entries plus the exact immutable graph definition. Executor dispatch is forbidden until intent and claim state are durable.
 
-This removes the unsafe `graph commit -> direct executor call` crash gap. Projection checkpoint and derived intents must commit atomically in the execution store, and journal replay must recreate missing intents idempotently after interruption.
+Phase 6 proved the pure deterministic projector. Phase 7 proved the durable projection/checkpoint and claim/lease store boundary. D-015 remains PROPOSED because dispatcher and end-to-end crash/reconciliation behavior are not yet implemented.
 
-D-015 MUST NOT move to ACCEPTED until the pure projector, execution-store, claim/lease, restart, and dispatcher suites defined by ORCH-001..056 have executable RED/GREEN evidence.
+D-015 MUST NOT move to ACCEPTED until the remaining dispatcher/reconciliation cases defined by the orchestration acceptance suite have executable RED/GREEN evidence.
 
 ### D-016 — At-least-once dispatch with stable execution identity
 
@@ -90,7 +102,7 @@ RFC: `docs/architecture/RFC/RFC-003-DURABLE-EXECUTION-ORCHESTRATION.md`
 
 AI-STACK proposes at-least-once orchestration at the executor-dispatch boundary rather than claiming impossible generic exactly-once external execution. Every execution attempt has a stable `ExecutionId`; uncertain/replayed dispatch reuses that identity. A conforming executor adapter must support idempotent start semantics and/or status reconciliation sufficient to prevent uncontrolled duplicate work.
 
-D-016 MUST NOT move to ACCEPTED until generic dispatcher tests prove stable-identity replay/reconciliation and the eventual OMP adapter proves the required semantics against OMP behavior.
+Phase 6 proved stable intent/execution identity and Phase 7 proved same-ID durable reclaim. D-016 remains PROPOSED until generic dispatcher tests prove start replay/status reconciliation and the eventual OMP adapter proves the required behavior against OMP.
 
 ## Open decisions
 
@@ -99,8 +111,8 @@ D-016 MUST NOT move to ACCEPTED until generic dispatcher tests prove stable-iden
 - D-011: Policy evaluation and permissions implementation mechanism
 - D-012: Graph DSL shape and relationship to Spec Kit semantics
 - D-014: Canonical operation serialization and digest generation
-- D-017: Concrete durable `ExecutionStore` backend and schema
 - D-018: Immutable graph-definition registry persistence/lookup mechanism
+- D-019: Dispatcher worker lifecycle and executor-selection mechanism
 
 ## Phase 1 domain contracts
 
@@ -177,7 +189,7 @@ TDD evidence:
 
 ## Phase 5 durable orchestration contracts
 
-Phase 5 specifies, but does not implement:
+Phase 5 specified:
 
 - journal-as-outbox execution projection;
 - stable execution identity and explicit attempt identity;
@@ -192,6 +204,50 @@ Phase 5 specifies, but does not implement:
 - crash/restart recovery matrix;
 - ORCH-001..056 component-owned acceptance behaviors.
 
-No production projector, execution-store adapter, dispatcher, graph registry, or OMP executor adapter is introduced in Phase 5.
+No production projector, execution-store adapter, dispatcher, graph registry, or OMP executor adapter was introduced in Phase 5.
+
+## Phase 6 pure execution projector evidence
+
+Phase 6 implemented only the journal-to-`ExecutionIntent` projector through TDD:
+
+- deterministic transition/retry/recovery projection;
+- no external intent for control nodes, run creation, or failure recording;
+- stable execution identity per authoritative attempt;
+- exact artifact/evidence/approval binding propagation;
+- executor-policy propagation;
+- typed graph/source integrity failures;
+- no persistence, executor, OMP, tool, or wall-clock side effects.
+
+TDD evidence:
+
+- clean RED: run `31297419258` — accepted suites stayed green while orchestration/typecheck failed only because the projector module did not exist;
+- GREEN: run `31297448470`;
+- post-refactor GREEN: run `31297481610` after execution-ID derivation was extracted.
+
+## Phase 7 durable ExecutionStore evidence
+
+Phase 7 implemented the first durable derived-orchestration store through TDD:
+
+- separate SQLite execution schema;
+- projection batch/checkpoint atomicity;
+- replay and intent-conflict detection;
+- durable PENDING/CLAIMED/RUNNING/SUCCEEDED/FAILED lifecycle;
+- live lease exclusion and expired lease reclaim;
+- `listRecoverable` for crashed/expired non-terminal work;
+- executor-reference durability;
+- terminal result idempotency/conflict protection;
+- real two-connection claim races;
+- close/reopen pending, lease, and terminal-result durability;
+- no OMP/dispatcher integration.
+
+TDD evidence:
+
+- initial RED: run `31298061054` — exposed a test fixture optional-property defect plus the expected missing adapter;
+- clean RED: run `31298087447` — accepted suites stayed green and new store tests/typecheck failed only because the adapter module did not exist;
+- behavioral GREEN diagnostic: run `31298184197` — all behavioral suites passed, leaving only an implementation import-type error;
+- GREEN: run `31298243264` — domain, authoritative persistence, orchestration, strict typecheck, and enforcement passed;
+- post-refactor GREEN: run `31298289515` — complete suite passed again.
+
+Dispatcher, graph registry persistence, executor selection, external executor start/status reconciliation, OMP execution, policy-engine implementation, canonical digest generation, and evidence payload storage/integrity remain outside the accepted Phase 7 boundary.
 
 Each open or proposed decision must be resolved by RFC/ADR with alternatives, constraints, tests, and acceptance evidence before implementation authority expands.
