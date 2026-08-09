@@ -39,6 +39,14 @@ jobs:
           set -o pipefail
           bun test tests/persistence 2>&1 | tee /tmp/persistence-tests.log
 
+      - name: Run orchestration tests
+        id: orchestration_tests
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -o pipefail
+          bun test tests/orchestration 2>&1 | tee /tmp/orchestration-tests.log
+
       - name: Run typecheck
         id: typecheck
         continue-on-error: true
@@ -53,6 +61,7 @@ jobs:
         env:
           DOMAIN_OUTCOME: ${{ steps.domain_tests.outcome }}
           PERSISTENCE_OUTCOME: ${{ steps.persistence_tests.outcome }}
+          ORCHESTRATION_OUTCOME: ${{ steps.orchestration_tests.outcome }}
           TYPECHECK_OUTCOME: ${{ steps.typecheck.outcome }}
         run: |
           sanitize_file() {
@@ -74,6 +83,11 @@ jobs:
 
           if [ "$PERSISTENCE_OUTCOME" != "success" ]; then
             echo "::error title=Persistence tests failed::$(sanitize_file /tmp/persistence-tests.log)"
+            failed=1
+          fi
+
+          if [ "$ORCHESTRATION_OUTCOME" != "success" ]; then
+            echo "::error title=Orchestration tests failed::$(sanitize_file /tmp/orchestration-tests.log)"
             failed=1
           fi
 
