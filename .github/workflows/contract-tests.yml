@@ -1,0 +1,45 @@
+name: Contract Tests
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  domain-contracts:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.14
+
+      - name: Install pinned direct dependencies
+        run: bun install
+
+      - name: Run domain tests
+        id: tests
+        continue-on-error: true
+        run: bun test tests/domain
+
+      - name: Run typecheck
+        id: typecheck
+        continue-on-error: true
+        run: bun run check
+
+      - name: Enforce contract checks
+        if: always()
+        env:
+          TESTS_OUTCOME: ${{ steps.tests.outcome }}
+          TYPECHECK_OUTCOME: ${{ steps.typecheck.outcome }}
+        run: |
+          if [ "$TESTS_OUTCOME" != "success" ] || [ "$TYPECHECK_OUTCOME" != "success" ]; then
+            echo "Contract checks are RED. This is expected until the corresponding implementation exists."
+            exit 1
+          fi
