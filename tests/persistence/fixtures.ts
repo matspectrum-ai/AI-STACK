@@ -2,6 +2,7 @@ import type {
   ContentDigest,
   FailureRecord,
   GraphRunState,
+  RetryPolicyId,
   StateRevision,
   TransitionDecision,
   TransitionId,
@@ -26,11 +27,8 @@ export const IDS = {
   recovery: "node:recovery" as GraphRunState["activeNodeIds"][number],
   edge: "edge:transition" as TransitionDecision["edgeId"],
   recoveryEdge: "edge:recovery" as TransitionDecision["edgeId"],
-  executor: "executor:test" as TransitionDecision["evaluatedGateResults"][number]["gateId"] extends never
-    ? never
-    : any,
   failure: "failure:test" as FailureRecord["failureId"],
-  retryPolicy: "retry:policy" as any,
+  retryPolicy: "retry:policy" as RetryPolicyId,
 } as const;
 
 export class DeterministicClock implements PersistenceClock {
@@ -53,7 +51,9 @@ export class DeterministicClock implements PersistenceClock {
   }
 
   now(): string {
-    const value = this.#timestamps[Math.min(this.#index, this.#timestamps.length - 1)];
+    const value = this.#timestamps[
+      Math.min(this.#index, this.#timestamps.length - 1)
+    ];
     this.#index += 1;
     if (!value) throw new Error("deterministic clock requires at least one timestamp");
     return value;
