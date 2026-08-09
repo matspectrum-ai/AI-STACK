@@ -7,7 +7,6 @@ import type {
 } from "../../../contracts/domain";
 import type {
   ExecutionGraphDefinition,
-  ExecutionId,
   ExecutionIntent,
   ExecutionNodeDefinition,
   ExecutionProjectionResult,
@@ -15,6 +14,7 @@ import type {
 } from "../../../contracts/execution";
 import type { JournalEntry } from "../../../contracts/persistence";
 import { createGraphKernel } from "../../domain/create-graph-kernel";
+import { deriveExecutionId } from "./execution-id";
 
 const graphKernel = createGraphKernel();
 
@@ -35,22 +35,6 @@ function validateExecutionGraph(graph: ExecutionGraphDefinition): boolean {
   return graph.nodes.every(
     (node) => node.executionMode === "control" || node.executionMode === "dispatch",
   );
-}
-
-function deriveExecutionId(
-  entry: JournalEntry,
-  nodeId: NodeId,
-  attempt: number,
-): ExecutionId {
-  const parts = [
-    entry.runId,
-    entry.graphVersion,
-    String(Number(entry.sequence)),
-    nodeId,
-    String(attempt),
-  ].map((part) => encodeURIComponent(part));
-
-  return `execution:v1:${parts.join(":")}` as ExecutionId;
 }
 
 function findNode(
