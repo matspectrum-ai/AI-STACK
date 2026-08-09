@@ -1,6 +1,5 @@
-import type { ExecutionResult } from "./execution";
+import type { ExecutionId, ExecutionResult } from "./execution";
 import type { ExecutionLaunchSpec } from "./execution-launch";
-import type { ExecutionId } from "./execution";
 
 export type OmpExecutionPhase =
   | "PREPARED"
@@ -8,6 +7,12 @@ export type OmpExecutionPhase =
   | "SUCCEEDED"
   | "FAILED"
   | "INTERRUPTED";
+
+export interface OmpStructuredTerminalOutput {
+  readonly schemaRef: string;
+  /** Already validated against the launch spec's JSON Schema. */
+  readonly value: unknown;
+}
 
 export interface OmpExecutionRecord {
   readonly executionId: ExecutionId;
@@ -20,6 +25,7 @@ export interface OmpExecutionRecord {
   readonly activatedAt?: string;
   readonly settledAt?: string;
   readonly terminalResult?: ExecutionResult;
+  readonly terminalOutput?: OmpStructuredTerminalOutput;
   readonly interruptionReason?: string;
 }
 
@@ -87,6 +93,7 @@ export interface OmpExecutionRegistry {
   markTerminal(request: {
     readonly executionId: ExecutionId;
     readonly result: ExecutionResult;
+    readonly output: OmpStructuredTerminalOutput;
     readonly settledAt: string;
   }): Promise<UpdateOmpExecutionResult>;
 
