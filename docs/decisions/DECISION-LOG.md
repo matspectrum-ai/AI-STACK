@@ -26,13 +26,23 @@ AI-STACK owns authoritative workflow state. External frameworks may contribute p
 
 Status: PROVISIONALLY ACCEPTED
 
-Implementation requires valid specification, contract, and RED evidence. Prose instructions are not sufficient enforcement. Phase 2 applies this discipline to AI-STACK itself through an observed RED → GREEN → REFACTOR cycle.
+Implementation requires valid specification, contract, and RED evidence. Prose instructions are not sufficient enforcement. AI-STACK applies this discipline to itself through observed RED → GREEN → REFACTOR cycles.
 
 ### D-005 — GSD as reference only
 
 Status: PROVISIONALLY ACCEPTED
 
 GSD concepts may inform context isolation and atomic execution, but the archived framework will not be a runtime dependency.
+
+### D-006 — Authoritative graph state persistence model
+
+Status: ACCEPTED
+RFC: `docs/architecture/RFC/RFC-002-AUTHORITATIVE-STATE-PERSISTENCE.md`
+Contract: `docs/contracts/AUTHORITATIVE-STATE-STORE.md`
+
+The accepted model uses an append-only per-run journal plus a current snapshot, optimistic concurrency via expected state revision, atomic journal+snapshot commits, and operation-ID/digest idempotency. The journal is audit authority; the snapshot is the current resume checkpoint.
+
+Phase 4 proved CAS conflict behavior, idempotent replay, conflicting replay rejection, atomic snapshot/journal state, deterministic close/reopen resume, failure/retry/recovery ordering, two-connection same-revision races, and fail-closed integrity behavior against a real file-backed backend.
 
 ### D-009 — Initial runtime/test substrate
 
@@ -41,17 +51,16 @@ ADR: `docs/architecture/ADR/ADR-001-INITIAL-RUNTIME-SUBSTRATE.md`
 
 TypeScript on Bun is the accepted v1 executable contract-test and initial runtime substrate. The pure Engineering Graph domain remains OMP-independent. Phase 2 established executable tests first, observed RED, implemented the minimum domain kernel, achieved GREEN under strict typecheck, refactored for cohesion, and re-verified GREEN.
 
+### D-013 — Initial persistence backend
+
+Status: ACCEPTED
+ADR: `docs/architecture/ADR/ADR-003-SQLITE-STATE-STORE.md`
+
+SQLite through Bun's built-in `bun:sqlite` driver is the accepted first local durable `AuthoritativeStateStore` adapter. The accepted authority scope is processes/connections coordinating through the same supported local SQLite file. The storage port remains backend-independent so a future PostgreSQL adapter can be introduced without changing graph contracts.
+
+Phase 4 accepted D-013 only after a real file-backed implementation passed the shared persistence conformance suite, including two independently opened store instances racing on the same expected revision and close/reopen durability.
+
 ## Decisions under acceptance test
-
-### D-006 — Authoritative graph state persistence model
-
-Status: PROPOSED
-RFC: `docs/architecture/RFC/RFC-002-AUTHORITATIVE-STATE-PERSISTENCE.md`
-Contract: `docs/contracts/AUTHORITATIVE-STATE-STORE.md`
-
-The proposed model uses an append-only per-run journal plus a current snapshot, optimistic concurrency via expected state revision, atomic journal+snapshot commits, and operation-ID/digest idempotency. The journal is audit authority; the snapshot is the current resume checkpoint.
-
-D-006 MUST NOT move to ACCEPTED until the executable persistence conformance suite proves CAS conflict behavior, idempotent replay, atomic snapshot/journal state, deterministic reopen/resume, retry/failure ordering, and fail-closed integrity behavior against a real durable backend.
 
 ### D-010 — OMP integration boundary
 
@@ -62,21 +71,14 @@ The proposed boundary is `Engineering Graph -> ExecutorPort -> OmpSdkExecutorAda
 
 D-010 MUST NOT move to ACCEPTED until the ExecutorPort and adapter behaviors are specified, executable tests are observed RED, and an implementation passes those tests without leaking OMP authority into the domain kernel.
 
-### D-013 — Initial persistence backend
-
-Status: PROPOSED
-ADR: `docs/architecture/ADR/ADR-003-SQLITE-STATE-STORE.md`
-
-SQLite through Bun's built-in `bun:sqlite` driver is proposed as the first local durable `AuthoritativeStateStore` adapter. The selected scope is local file-backed authority with real transaction/concurrency tests. The storage port remains backend-independent so a future PostgreSQL adapter can be added without changing graph contracts.
-
-D-013 MUST NOT move to ACCEPTED until a file-backed SQLite implementation passes the shared persistence conformance suite, including two-connection concurrent writers and reopen/resume tests.
-
 ## Open decisions
 
 - D-007: Evidence storage format
 - D-008: Artifact identity and lineage concrete representation
 - D-011: Policy evaluation and permissions implementation mechanism
 - D-012: Graph DSL shape and relationship to Spec Kit semantics
+- D-014: Canonical operation serialization and digest generation
+- D-015: Orchestration dispatch boundary between committed graph state and executor activation
 
 ## Phase 1 domain contracts
 
@@ -112,7 +114,7 @@ Phase 2 added the first executable contract boundary and pure domain implementat
 
 ## Phase 3 persistence contracts
 
-Phase 3 specifies, but does not implement:
+Phase 3 specified:
 
 - `AuthoritativeStateStore` async port;
 - create/load/commit/journal typed outcomes;
@@ -124,6 +126,33 @@ Phase 3 specifies, but does not implement:
 - SQLite as the proposed first durable adapter;
 - STORE-001..034 conformance requirements.
 
-No persistence adapter, SQL schema, OMP integration, evidence payload integrity implementation, or orchestration dispatch is introduced in Phase 3.
+No persistence adapter was implemented in Phase 3.
+
+## Phase 4 persistence implementation evidence
+
+Phase 4 implemented the first durable authority boundary through TDD:
+
+- SQLite adapter constructor/lifecycle/clock contract;
+- logical schema contract for runs, journal, idempotency, and schema metadata;
+- versioned JSON envelopes with runtime decoding;
+- file-backed conformance tests and test-only corruption inspection;
+- immediate write transactions for state-changing operations;
+- optimistic revision checks;
+- operation-ID/digest replay semantics;
+- immutable journal through the production port;
+- deterministic close/reopen state recovery;
+- two-store concurrent writer conformance;
+- fail-closed corruption handling;
+- failure-before-retry/recovery ordering;
+- post-GREEN cohesion refactor and re-verification.
+
+TDD evidence:
+
+- clean RED: run `31296829751` — persistence/typecheck failed only because the contracted SQLite adapter module did not exist;
+- implementation diagnostic: run `31296939329` — persistence behavior passed while one implementation-only type error remained;
+- GREEN: run `31296969993` — domain tests, persistence tests, strict typecheck, and enforcement passed;
+- post-refactor GREEN: run `31297024859` — complete suite passed again.
+
+OMP execution, policy-engine implementation, canonical digest generation, evidence payload integrity, and orchestration dispatch remain outside the accepted Phase 4 boundary.
 
 Each open or proposed decision must be resolved by RFC/ADR with alternatives, constraints, tests, and acceptance evidence before implementation authority expands.
