@@ -26,20 +26,48 @@ jobs:
       - name: Run domain tests
         id: tests
         continue-on-error: true
-        run: bun test tests/domain
+        shell: bash
+        run: |
+          set -o pipefail
+          bun test tests/domain 2>&1 | tee /tmp/domain-tests.log
 
       - name: Run typecheck
         id: typecheck
         continue-on-error: true
-        run: bun run check
+        shell: bash
+        run: |
+          set -o pipefail
+          bun run check 2>&1 | tee /tmp/typecheck.log
 
       - name: Enforce contract checks
         if: always()
+        shell: bash
         env:
           TESTS_OUTCOME: ${{ steps.tests.outcome }}
           TYPECHECK_OUTCOME: ${{ steps.typecheck.outcome }}
         run: |
-          if [ "$TESTS_OUTCOME" != "success" ] || [ "$TYPECHECK_OUTCOME" != "success" ]; then
-            echo "Contract checks are RED. This is expected until the corresponding implementation exists."
+          sanitize_file() {
+            local file="$1"
+            if [ -f "$file" ]; then
+              tail -n 20 "$file" \
+                | tr '\n' ' ' \
+                | sed -e 's/%/%25/g' -e 's/\r/%0D/g' -e 's/\n/%0A/g' \
+                | cut -c1-3000
+            fi
+          }
+
+          failed=0
+
+          if [ "$TESTS_OUTCOME" != "success" ]; then
+            echo "::error title=Domain tests failed::$(sanitize_file /tmp/domain-tests.log)"
+            failed=1
+          fi
+
+          if [ "$TYPECHECK_OUTCOME" != "success" ]; then
+            echo "::error title=Typecheck failed::$(sanitize_file /tmp/typecheck.log)"
+            failed=1
+          fi
+
+          if [ "$failed" -ne 0 ]; then
             exit 1
           fi
