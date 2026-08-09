@@ -1,10 +1,8 @@
 import type {
   ClaimExecutionResult,
   ExecutionId,
-  ExecutionIntent,
   ExecutionLease,
   ExecutionResult,
-  ExecutorStartRequest,
   ExecutorStartResult,
   ExecutorStatusResult,
   MarkRunningResult,
@@ -17,6 +15,7 @@ import type {
   DispatcherStateFailure,
   ExecutionDispatcher,
 } from "../../../contracts/dispatcher";
+import { toExecutorStartRequest } from "./executor-request";
 
 interface UsableClaim {
   readonly execution: StoredExecution;
@@ -44,20 +43,6 @@ function terminalResult(execution: StoredExecution): DispatchResult {
     status: "TERMINAL",
     execution,
     result: execution.terminalResult,
-  };
-}
-
-function startRequest(intent: ExecutionIntent): ExecutorStartRequest {
-  return {
-    executionId: intent.executionId,
-    runId: intent.runId,
-    graphId: intent.graphId,
-    graphVersion: intent.graphVersion,
-    nodeId: intent.nodeId,
-    attempt: intent.attempt,
-    boundArtifactIds: [...intent.boundArtifactIds],
-    boundEvidenceIds: [...intent.boundEvidenceIds],
-    boundApprovalIds: [...intent.boundApprovalIds],
   };
 }
 
@@ -316,7 +301,7 @@ export function createExecutionDispatcher(
 
     let started: ExecutorStartResult;
     try {
-      started = await executor.start(startRequest(claim.execution.intent));
+      started = await executor.start(toExecutorStartRequest(claim.execution.intent));
     } catch {
       return reconcileWithClaim(claim);
     }
