@@ -3,7 +3,6 @@ import type {
   ExecutionIntent,
   ExecutionResult,
   ExecutionResultReference,
-  ProjectorId,
   WorkerId,
   LeaseId,
   ExecutorReference,
@@ -248,8 +247,4 @@ export function asExecutorReference(value: string | null): ExecutorReference | u
   if (value === null) return undefined;
   if (!isNonEmptyString(value)) throw new Error("MALFORMED_ORCHESTRATION_STATE");
   return value as ExecutorReference;
-}
-
-export function asProjectorId(value: string): ProjectorId {
-  return value as ProjectorId;
 }
