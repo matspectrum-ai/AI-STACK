@@ -25,6 +25,7 @@ export interface OmpExecutionRecord {
   readonly activatedAt?: string;
   readonly settledAt?: string;
   readonly terminalResult?: ExecutionResult;
+  /** Required for SUCCEEDED; optional for FAILED. */
   readonly terminalOutput?: OmpStructuredTerminalOutput;
   readonly interruptionReason?: string;
 }
@@ -93,7 +94,8 @@ export interface OmpExecutionRegistry {
   markTerminal(request: {
     readonly executionId: ExecutionId;
     readonly result: ExecutionResult;
-    readonly output: OmpStructuredTerminalOutput;
+    /** Required when result.outcome is SUCCEEDED; optional on FAILED. */
+    readonly output?: OmpStructuredTerminalOutput;
     readonly settledAt: string;
   }): Promise<UpdateOmpExecutionResult>;
 
