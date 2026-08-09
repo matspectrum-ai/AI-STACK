@@ -10,7 +10,7 @@ import type {
   ExecutionResultReference,
 } from "../../contracts/execution";
 import type { DurableExecutionStore } from "../../contracts/execution-store";
-import type { JournalEntry, JournalSequence } from "../../contracts/persistence";
+import type { JournalEntry } from "../../contracts/persistence";
 import { createExecutionProjector } from "../../src/orchestration/projector/create-execution-projector";
 import {
   IDS,
@@ -64,14 +64,16 @@ export function derivedIntents(
 
 export function projectionRequest(sequence: number) {
   const entry = sourceEntry(sequence);
-  return {
+  const base = {
     projectorId: PROJECTOR_ID,
     entry,
     graph: executionGraph,
-    expectedCheckpoint:
-      sequence === 0 ? undefined : (asSequence(sequence - 1) as JournalSequence),
     derivedIntents: derivedIntents(entry),
   };
+
+  return sequence === 0
+    ? base
+    : { ...base, expectedCheckpoint: asSequence(sequence - 1) };
 }
 
 export async function projectSequence(
