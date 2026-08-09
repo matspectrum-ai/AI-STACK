@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import type { GraphRunState } from "../../contracts/domain";
 import type { JournalSequence } from "../../contracts/persistence";
 import {
   IDS,
@@ -99,9 +100,12 @@ describe("SQLite authoritative state store: commit, concurrency, ordering", () =
     const env = await createSqliteTestEnvironment();
     try {
       await env.store.createRun(createRunRequest());
-      const invalid = transitionCommit(0, asOperationId("op:bad-revision"), asDigest("sha256:bad-revision"), {
-        nextState: state(2),
-      });
+      const invalid = transitionCommit(
+        0,
+        asOperationId("op:bad-revision"),
+        asDigest("sha256:bad-revision"),
+        { nextState: state(2) },
+      );
       const result = await env.store.commit(invalid);
       expect(result.status).toBe("INTEGRITY_ERROR");
       if (result.status !== "INTEGRITY_ERROR") throw new Error("expected integrity error");
@@ -226,7 +230,11 @@ describe("SQLite authoritative state store: commit, concurrency, ordering", () =
     const env = await createSqliteTestEnvironment();
     try {
       await env.store.createRun(createRunRequest());
-      const request = transitionCommit(0, asOperationId("op:graph-change"), asDigest("sha256:graph-change"));
+      const request = transitionCommit(
+        0,
+        asOperationId("op:graph-change"),
+        asDigest("sha256:graph-change"),
+      );
       const changed = {
         ...request,
         nextState: {
@@ -247,7 +255,11 @@ describe("SQLite authoritative state store: commit, concurrency, ordering", () =
     const env = await createSqliteTestEnvironment();
     try {
       await env.store.createRun(createRunRequest());
-      const request = transitionCommit(0, asOperationId("op:run-change"), asDigest("sha256:run-change"));
+      const request = transitionCommit(
+        0,
+        asOperationId("op:run-change"),
+        asDigest("sha256:run-change"),
+      );
       const changed = {
         ...request,
         nextState: {
@@ -268,7 +280,11 @@ describe("SQLite authoritative state store: commit, concurrency, ordering", () =
     const env = await createSqliteTestEnvironment();
     try {
       await env.store.createRun(createRunRequest());
-      const request = transitionCommit(0, asOperationId("op:bad-decision-revision"), asDigest("sha256:bad-decision-revision"));
+      const request = transitionCommit(
+        0,
+        asOperationId("op:bad-decision-revision"),
+        asDigest("sha256:bad-decision-revision"),
+      );
       const badDecision = {
         ...transitionDecision(0),
         stateRevisionAfter: asRevision(2),
