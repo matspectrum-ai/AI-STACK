@@ -75,6 +75,16 @@ export interface ExecutionLaunchSpec {
   readonly deadlineEpochMs: number;
 }
 
+export type ExecutionLaunchInvalidCode =
+  | "IDENTITY_MISMATCH"
+  | "BINDING_MISMATCH"
+  | "INVALID_WORKSPACE"
+  | "INVALID_INSTRUCTION"
+  | "INVALID_MODEL"
+  | "INVALID_TOOL_POLICY"
+  | "INVALID_OUTPUT_CONTRACT"
+  | "INVALID_DEADLINE";
+
 export type ResolveExecutionLaunchSpecResult =
   | {
       readonly status: "FOUND";
@@ -86,19 +96,28 @@ export type ResolveExecutionLaunchSpecResult =
     }
   | {
       readonly status: "INVALID";
-      readonly code:
-        | "IDENTITY_MISMATCH"
-        | "BINDING_MISMATCH"
-        | "INVALID_WORKSPACE"
-        | "INVALID_INSTRUCTION"
-        | "INVALID_MODEL"
-        | "INVALID_TOOL_POLICY"
-        | "INVALID_OUTPUT_CONTRACT"
-        | "INVALID_DEADLINE";
+      readonly code: ExecutionLaunchInvalidCode;
     };
 
 export interface ExecutionLaunchSpecResolver {
   resolve(
     request: ExecutorStartRequest,
   ): Promise<ResolveExecutionLaunchSpecResult>;
+}
+
+export type ValidateExecutionLaunchSpecResult =
+  | {
+      readonly status: "VALID";
+      readonly spec: ExecutionLaunchSpec;
+    }
+  | {
+      readonly status: "INVALID";
+      readonly code: ExecutionLaunchInvalidCode;
+    };
+
+export interface ExecutionLaunchSpecValidator {
+  validate(
+    request: ExecutorStartRequest,
+    spec: ExecutionLaunchSpec,
+  ): ValidateExecutionLaunchSpecResult;
 }
