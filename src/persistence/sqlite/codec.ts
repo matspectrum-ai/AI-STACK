@@ -8,7 +8,6 @@ import type {
   GraphRunState,
   NodeExecutionId,
   NodeId,
-  ReasonCode,
   RunId,
   StateRevision,
   TransitionDecision,
@@ -88,7 +87,7 @@ export function decodeGraphRunState(raw: string): GraphRunState {
   return {
     runId: value.runId as RunId,
     graphId: value.graphId as GraphId,
-    graphVersion: value.graphVersion,
+    graphVersion: value.graphVersion as string,
     revision: value.revision as StateRevision,
     activeNodeIds: value.activeNodeIds as NodeId[],
     completedExecutionIds: value.completedExecutionIds as NodeExecutionId[],
@@ -104,7 +103,6 @@ export function decodeGraphRunState(raw: string): GraphRunState {
 }
 
 const TRANSITION_OUTCOMES = new Set(["ALLOW", "DENY", "PAUSE"]);
-const EVIDENCE_STATUSES = new Set(["UNVERIFIED", "VALID", "INVALID", "EXPIRED"]);
 const FAILURE_CLASSES = new Set([
   "EXECUTION_FAILURE",
   "CONTRACT_VIOLATION",
