@@ -8,9 +8,9 @@ import type {
   FailureRecord,
   GateId,
   GraphId,
-  NodeExecutionId,
   NodeId,
   PolicyId,
+  RetryPolicyId,
   RunId,
   StateRevision,
   TransitionDecision,
@@ -36,12 +36,12 @@ export const asArtifactId = (value: string) => value as ArtifactId;
 export const asEvidenceId = (value: string) => value as EvidenceId;
 export const asApprovalId = (value: string) => value as ApprovalId;
 export const asFailureId = (value: string) => value as FailureId;
-export const asExecutionId = (value: string) => value as NodeExecutionId;
 export const asTransitionId = (value: string) => value as TransitionId;
 export const asOperationId = (value: string) => value as OperationId;
 export const asSequence = (value: number) => value as JournalSequence;
 export const asRevision = (value: number) => value as StateRevision;
 export const asDigest = (value: string) => value as ContentDigest;
+export const asRetryPolicyId = (value: string) => value as RetryPolicyId;
 
 export const IDS = {
   graph: asGraphId("graph:orchestration"),
@@ -59,6 +59,7 @@ export const IDS = {
   evidence: asEvidenceId("evidence:input"),
   approval: asApprovalId("approval:input"),
   failure: asFailureId("failure:input"),
+  retryPolicy: asRetryPolicyId("retry:policy"),
 } as const;
 
 export function node(
@@ -173,7 +174,7 @@ export function retryEntry(
   return journalEntry({
     kind: "retry_activated",
     governingFailureId: IDS.failure,
-    retryPolicyId: "retry:policy" as any,
+    retryPolicyId: IDS.retryPolicy,
     retryCounterKey: "implementation",
     nextAttempt,
     activationNodeId,
@@ -186,13 +187,16 @@ export function recoveryEntry(
   return journalEntry({
     kind: "recovery_activated",
     governingFailureId: IDS.failure,
-    recoveryEdgeId: "edge:recovery" as EdgeId,
+    recoveryEdgeId: asEdgeId("edge:recovery"),
     recoveryNodeId,
   });
 }
 
 export function runCreatedEntry(): JournalEntry {
-  return journalEntry({ kind: "run_created" }, { sequence: asSequence(0), resultingStateRevision: asRevision(0) });
+  return journalEntry(
+    { kind: "run_created" },
+    { sequence: asSequence(0), resultingStateRevision: asRevision(0) },
+  );
 }
 
 export function failureEntry(): JournalEntry {
