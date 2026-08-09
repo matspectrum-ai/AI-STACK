@@ -3,9 +3,7 @@ import type {
   ExecutionIntent,
   ExecutionResult,
   ExecutionResultReference,
-  PolicyId,
   ProjectorId,
-  RunId,
   WorkerId,
   LeaseId,
   ExecutorReference,
@@ -17,6 +15,8 @@ import type {
   EvidenceId,
   GraphId,
   NodeId,
+  PolicyId,
+  RunId,
 } from "../../../../contracts/domain";
 import type {
   JournalSequence,
