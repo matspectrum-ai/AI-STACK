@@ -72,6 +72,35 @@ The accepted generic recovery refinement is `DurableExecutionStore.listRecoverab
 
 Phase 7 accepted D-017 only after executable tests proved atomic projection/checkpoint persistence, idempotent projection replay, immutable intent content, live-lease exclusion, expired-lease reclaim, stale/expired lease rejection, real two-connection claim contention, terminal result immutability, close/reopen durability, and expired-work discovery. Post-refactor run `31298289515` remained fully green.
 
+### D-020 — Generic durable dispatcher and reconciliation state machine
+
+Status: ACCEPTED
+Contract: `docs/contracts/EXECUTION-DISPATCHER.md`
+Test map: `docs/testing/DISPATCHER-CONFORMANCE.md`
+
+AI-STACK accepts a generic dispatcher between `DurableExecutionStore` and one already-selected `ExecutorPort`. The dispatcher requires a durable claim before external start, preserves the immutable `ExecutionIntent` identity/bindings, and treats uncertain external start outcomes as a reconciliation problem using the same `ExecutionId` rather than creating another attempt.
+
+Accepted semantics include:
+
+- no executor call without a durable intent and usable claim;
+- `STARTED` and `ALREADY_STARTED` persist the same execution as RUNNING;
+- `ALREADY_COMPLETED` persists the supplied terminal result;
+- uncertain start performs `getStatus(same executionId)`;
+- `NOT_FOUND` permits a later retry with the same execution ID/attempt;
+- `UNKNOWN` forbids blind immediate restart;
+- expired worker claims are reclaimed under the same execution ID before reconciliation;
+- durable terminal state is not redispatched;
+- generic `ExecutorPort` exposes no graph-authority mutation methods.
+
+Phase 8 TDD evidence:
+
+- clean RED: run `31298484904` — accepted domain/persistence/projector/ExecutionStore behavior remained green while dispatcher tests/typecheck failed only because `create-execution-dispatcher.ts` did not exist;
+- behavioral GREEN diagnostic: run `31298524823` — all 62 orchestration tests passed while one implementation-only TypeScript narrowing error remained;
+- GREEN: run `31298574716` — all suites, strict typecheck, and enforcement passed;
+- post-refactor GREEN: run `31298611752` — complete suite passed after immutable intent-to-start-request mapping was extracted.
+
+D-020 does not accept executor selection/routing, a worker scheduler loop, OMP behavior, graph-registry persistence, graph application transitions, or evidence/artifact production from executor outputs.
+
 ## Decisions under acceptance test
 
 ### D-010 — OMP integration boundary
@@ -81,7 +110,7 @@ Research: `docs/research/OMP-INTEGRATION.md`
 
 The proposed boundary is `Engineering Graph -> ExecutorPort -> OmpSdkExecutorAdapter -> OMP SDK`, with RPC as a replaceable adapter boundary when process isolation or cross-language operation is required.
 
-D-010 MUST NOT move to ACCEPTED until the generic `ExecutorPort`, durable orchestration boundary, and OMP-specific adapter behaviors are separately specified, observed RED, and implemented without leaking OMP authority into graph state.
+The generic `ExecutorPort` and dispatcher behavior are now proven. D-010 MUST NOT move to ACCEPTED until OMP-specific start/idempotency/status/result semantics are separately specified, observed RED, and implemented without leaking OMP authority into graph state.
 
 ### D-015 — Journal-as-outbox durable orchestration
 
@@ -91,18 +120,27 @@ Contract: `docs/contracts/EXECUTION-ORCHESTRATION.md`
 
 The proposed orchestration boundary treats the accepted authoritative graph journal as a durable outbox. A deterministic projector derives durable `ExecutionIntent` records from committed journal entries plus the exact immutable graph definition. Executor dispatch is forbidden until intent and claim state are durable.
 
-Phase 6 proved the pure deterministic projector. Phase 7 proved the durable projection/checkpoint and claim/lease store boundary. D-015 remains PROPOSED because dispatcher and end-to-end crash/reconciliation behavior are not yet implemented.
+Phase 6 proved the pure deterministic projector. Phase 7 proved the durable projection/checkpoint and claim/lease store boundary. Phase 8 proved the generic dispatcher/reconciliation state machine.
 
-D-015 MUST NOT move to ACCEPTED until the remaining dispatcher/reconciliation cases defined by the orchestration acceptance suite have executable RED/GREEN evidence.
+D-015 remains PROPOSED because the production control path is still incomplete. The following are not yet accepted:
+
+- durable exact-version `GraphDefinitionRegistry` implementation (D-018 / ORCH-053);
+- production journal projection runner/pump wiring `AuthoritativeStateStore journal -> exact graph registry -> projector -> ExecutionStore`;
+- explicit executable closure for execution-result/graph-authority separation at the application boundary (ORCH-047);
+- explicit executable generic-contract check that no OMP types leak into generic orchestration contracts (ORCH-056).
+
+D-015 MUST NOT move to ACCEPTED until those gaps have executable RED/GREEN evidence and the journal-to-durable-intent recovery path is demonstrated end-to-end without an executor dependency.
 
 ### D-016 — At-least-once dispatch with stable execution identity
 
 Status: PROPOSED
 RFC: `docs/architecture/RFC/RFC-003-DURABLE-EXECUTION-ORCHESTRATION.md`
 
-AI-STACK proposes at-least-once orchestration at the executor-dispatch boundary rather than claiming impossible generic exactly-once external execution. Every execution attempt has a stable `ExecutionId`; uncertain/replayed dispatch reuses that identity. A conforming executor adapter must support idempotent start semantics and/or status reconciliation sufficient to prevent uncontrolled duplicate work.
+AI-STACK proposes at-least-once orchestration at the executor-dispatch boundary rather than claiming impossible generic exactly-once external execution. Every execution attempt has a stable `ExecutionId`; uncertain/replayed dispatch reuses that identity.
 
-Phase 6 proved stable intent/execution identity and Phase 7 proved same-ID durable reclaim. D-016 remains PROPOSED until generic dispatcher tests prove start replay/status reconciliation and the eventual OMP adapter proves the required behavior against OMP.
+Phase 6 proved stable intent/execution identity, Phase 7 proved same-ID durable reclaim, and Phase 8 proved generic same-ID start/reconciliation behavior with a programmable fake executor.
+
+D-016 remains PROPOSED until the OMP adapter proves the required idempotent-start and/or status-reconciliation semantics against real OMP behavior.
 
 ## Open decisions
 
@@ -112,7 +150,7 @@ Phase 6 proved stable intent/execution identity and Phase 7 proved same-ID durab
 - D-012: Graph DSL shape and relationship to Spec Kit semantics
 - D-014: Canonical operation serialization and digest generation
 - D-018: Immutable graph-definition registry persistence/lookup mechanism
-- D-019: Dispatcher worker lifecycle and executor-selection mechanism
+- D-019: Dispatcher worker scheduler lifecycle and executor-selection/routing mechanism
 
 ## Phase 1 domain contracts
 
@@ -248,6 +286,29 @@ TDD evidence:
 - GREEN: run `31298243264` — domain, authoritative persistence, orchestration, strict typecheck, and enforcement passed;
 - post-refactor GREEN: run `31298289515` — complete suite passed again.
 
-Dispatcher, graph registry persistence, executor selection, external executor start/status reconciliation, OMP execution, policy-engine implementation, canonical digest generation, and evidence payload storage/integrity remain outside the accepted Phase 7 boundary.
+## Phase 8 generic dispatcher evidence
+
+Phase 8 implemented only the generic dispatcher/reconciliation boundary through TDD:
+
+- injected deterministic clock and lease factory;
+- durable claim before external start;
+- exact immutable intent-to-executor request mapping;
+- STARTED / ALREADY_STARTED / ALREADY_COMPLETED handling;
+- same-ID reconciliation after uncertain start;
+- NOT_FOUND -> later retry with same ID/attempt;
+- UNKNOWN -> no blind immediate restart;
+- expired worker claim reclaim before restart reconciliation;
+- terminal state redispatch suppression;
+- explicit executor rejection without manufactured terminal result;
+- no executor selection/routing and no OMP dependency.
+
+TDD evidence:
+
+- clean RED: run `31298484904`;
+- behavioral GREEN diagnostic: run `31298524823` — all 62 orchestration tests passed, with one implementation-only type-narrowing error remaining;
+- GREEN: run `31298574716`;
+- post-refactor GREEN: run `31298611752` after immutable executor request mapping was extracted.
+
+Graph registry persistence, production projection runner, executor selection/routing, OMP execution, policy-engine implementation, canonical digest generation, evidence payload storage/integrity, and graph application after terminal executor results remain outside the accepted Phase 8 boundary.
 
 Each open or proposed decision must be resolved by RFC/ADR with alternatives, constraints, tests, and acceptance evidence before implementation authority expands.
