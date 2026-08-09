@@ -172,16 +172,56 @@ export interface TransitionDecision {
   readonly reasonCodes: readonly ReasonCode[];
   readonly evaluatedGateResults: readonly GateResult[];
   readonly evaluatedPolicyResults: readonly PolicyResult[];
+  readonly boundArtifactIds: readonly ArtifactId[];
   readonly boundApprovalIds: readonly ApprovalId[];
   readonly boundEvidenceIds: readonly EvidenceId[];
   readonly stateRevisionBefore: StateRevision;
   readonly stateRevisionAfter?: StateRevision;
 }
 
-export interface GateDefinition {
+export type SubjectSelector =
+  | { readonly kind: "exact"; readonly subjectRef: string }
+  | { readonly kind: "artifact_kind"; readonly artifactKind: ArtifactKind };
+
+export type GateDefinition =
+  | ArtifactPresentGateDefinition
+  | EvidenceValidGateDefinition
+  | ApprovalPresentGateDefinition;
+
+export interface ArtifactPresentGateDefinition {
   readonly gateId: GateId;
-  readonly gateType: string;
-  readonly requiredInputs: readonly string[];
+  readonly gateType: "artifact_present";
+  readonly artifactKind: ArtifactKind;
+  readonly missingReason: ReasonCode;
+}
+
+export interface EvidenceValidGateDefinition {
+  readonly gateId: GateId;
+  readonly gateType: "evidence_valid";
+  readonly evidenceType: string;
+  readonly subject: SubjectSelector;
+  readonly missingReason: ReasonCode;
+  readonly invalidReason: ReasonCode;
+}
+
+export interface ApprovalPresentGateDefinition {
+  readonly gateId: GateId;
+  readonly gateType: "approval_present";
+  readonly action: string;
+  readonly subject: SubjectSelector;
+  readonly requireIndependentApprover: boolean;
+  readonly missingReason: ReasonCode;
+  readonly expiredReason: ReasonCode;
+  readonly selfApprovalReason: ReasonCode;
+}
+
+export interface GateEvaluationContext {
+  readonly state: GraphRunState;
+  readonly artifacts: readonly ArtifactRecord[];
+  readonly evidence: readonly EvidenceRecord[];
+  readonly approvals: readonly ApprovalRecord[];
+  readonly requestedByExecutorId: ExecutorId;
+  readonly now: string;
 }
 
 export interface GateResult {
@@ -189,6 +229,9 @@ export interface GateResult {
   readonly outcome: GateOutcome;
   readonly reasonCodes: readonly ReasonCode[];
   readonly evaluatedInputRefs: readonly string[];
+  readonly boundArtifactIds: readonly ArtifactId[];
+  readonly boundEvidenceIds: readonly EvidenceId[];
+  readonly boundApprovalIds: readonly ApprovalId[];
 }
 
 export interface PolicyDefinition {
@@ -264,26 +307,37 @@ export interface RetryPolicy {
   readonly exhaustionEdgeId: EdgeId;
 }
 
+export interface RetryDecision {
+  readonly allowed: boolean;
+  readonly reasonCodes: readonly ReasonCode[];
+  readonly nextAttempt?: number;
+  readonly exhaustionEdgeId?: EdgeId;
+}
+
 export interface TransitionEvaluationContext {
   readonly graph: GraphDefinition;
   readonly state: GraphRunState;
   readonly artifacts: readonly ArtifactRecord[];
-  readonly evidence: readonly EvidenceRecord[];
-  readonly executors: readonly ExecutorRecord[];
-  readonly approvals: readonly ApprovalRecord[];
-  readonly failures: readonly FailureRecord[];
-  readonly gates: readonly GateDefinition[];
-  readonly policies: readonly PolicyDefinition[];
-  readonly retryPolicies: readonly RetryPolicy[];
-  readonly now: string;
+  readonly gateResults: readonly GateResult[];
+  readonly policyResults: readonly PolicyResult[];
 }
 
 export interface GraphKernel {
   validateGraph(graph: GraphDefinition): readonly ReasonCode[];
+  validateGraphReplacement(
+    activated: GraphDefinition,
+    proposed: GraphDefinition,
+  ): readonly ReasonCode[];
+  evaluateGate(definition: GateDefinition, context: GateEvaluationContext): GateResult;
   evaluateTransition(
     request: TransitionRequest,
     context: TransitionEvaluationContext,
   ): TransitionDecision;
   validateArtifactLineage(artifacts: readonly ArtifactRecord[]): readonly ReasonCode[];
   validateRetryPolicy(policy: RetryPolicy): readonly ReasonCode[];
+  evaluateRetry(
+    failure: FailureRecord,
+    policy: RetryPolicy,
+    attemptsUsed: number,
+  ): RetryDecision;
 }
