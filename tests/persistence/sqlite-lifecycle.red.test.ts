@@ -23,14 +23,14 @@ describe("SQLite authoritative state store: creation, load, idempotency", () => 
     try {
       const created = await env.store.createRun(createRunRequest());
       expectReceipt(created, "CREATED");
-      expect(created.receipt.stateRevision).toBe(0);
-      expect(created.receipt.journalSequence).toBe(0);
+      expect(Number(created.receipt.stateRevision)).toBe(0);
+      expect(Number(created.receipt.journalSequence)).toBe(0);
 
       const loaded = await env.store.loadRun({ runId: IDS.run });
       expect(loaded.status).toBe("FOUND");
       if (loaded.status !== "FOUND") throw new Error("expected FOUND");
       expect(loaded.snapshot.state).toEqual(state(0));
-      expect(loaded.snapshot.journalHeadSequence).toBe(0);
+      expect(Number(loaded.snapshot.journalHeadSequence)).toBe(0);
     } finally {
       await env.cleanup();
     }
@@ -171,7 +171,7 @@ describe("SQLite authoritative state store: creation, load, idempotency", () => 
       const loaded = await env.store.loadRun({ runId: IDS.run });
       expect(loaded.status).toBe("FOUND");
       if (loaded.status !== "FOUND") throw new Error("expected FOUND");
-      expect(loaded.snapshot.state.revision).toBe(2);
+      expect(Number(loaded.snapshot.state.revision)).toBe(2);
 
       const journal = await env.store.readJournal({ runId: IDS.run });
       expect(journal.status).toBe("FOUND");
@@ -197,7 +197,7 @@ describe("SQLite authoritative state store: creation, load, idempotency", () => 
       const loaded = await env.store.loadRun({ runId: IDS.run });
       expect(loaded.status).toBe("FOUND");
       if (loaded.status !== "FOUND") throw new Error("expected FOUND");
-      expect(loaded.snapshot.state.revision).toBe(1);
+      expect(Number(loaded.snapshot.state.revision)).toBe(1);
     } finally {
       await env.cleanup();
     }
