@@ -268,12 +268,24 @@ export interface ExecutionProjection {
   readonly intents: readonly ExecutionIntent[];
 }
 
+export type ExecutionProjectionResult =
+  | {
+      readonly status: "PROJECTED";
+      readonly projection: ExecutionProjection;
+    }
+  | {
+      readonly status: "INTEGRITY_ERROR";
+      readonly code:
+        | "PROJECTION_INTEGRITY_FAILURE"
+        | "GRAPH_DEFINITION_INVALID";
+    };
+
 export interface ExecutionProjector {
   derive(
     entry: JournalEntry,
     graph: ExecutionGraphDefinition,
     createdAt: string,
-  ): ExecutionProjection;
+  ): ExecutionProjectionResult;
 }
 
 export interface ExecutorStartRequest {
