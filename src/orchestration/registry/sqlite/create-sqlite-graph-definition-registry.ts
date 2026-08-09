@@ -10,18 +10,12 @@ import type {
 } from "../../../../contracts/sqlite-graph-registry";
 import { canonicalGraphJson } from "../canonicalize-graph";
 import { isValidExecutionGraphDefinition } from "../validate-graph-definition";
-import { decodeGraphDefinition, encodeGraphDefinition } from "./codec";
+import { encodeGraphDefinition } from "./codec";
+import { decodeExactGraphRow, readGraphRow } from "./records";
 import {
   configureGraphRegistrySqlite,
   initializeGraphRegistrySchema,
 } from "./schema";
-
-interface GraphRow {
-  readonly graph_id: string;
-  readonly graph_version: string;
-  readonly canonical_json: string;
-  readonly definition_json: string;
-}
 
 function assertOptions(options: SqliteGraphRegistryOptions): void {
   if (
@@ -37,43 +31,6 @@ function assertOptions(options: SqliteGraphRegistryOptions): void {
     options.busyTimeoutMs < 0
   ) {
     throw new Error("busyTimeoutMs must be a finite non-negative integer");
-  }
-}
-
-function readGraphRow(
-  db: Database,
-  graphId: string,
-  graphVersion: string,
-): GraphRow | undefined {
-  const row = db
-    .query(
-      `SELECT graph_id, graph_version, canonical_json, definition_json
-         FROM graph_definitions
-        WHERE graph_id = ? AND graph_version = ?`,
-    )
-    .get(graphId, graphVersion) as GraphRow | null | undefined;
-  return row ?? undefined;
-}
-
-function decodeExactRow(
-  row: GraphRow,
-  graphId: string,
-  graphVersion: string,
-): ExecutionGraphDefinition | undefined {
-  try {
-    const graph = decodeGraphDefinition(row.definition_json);
-    if (
-      graph.graphId !== graphId ||
-      graph.graphVersion !== graphVersion ||
-      row.graph_id !== graphId ||
-      row.graph_version !== graphVersion ||
-      canonicalGraphJson(graph) !== row.canonical_json
-    ) {
-      return undefined;
-    }
-    return graph;
-  } catch {
-    return undefined;
   }
 }
 
@@ -105,7 +62,7 @@ export async function createSqliteGraphDefinitionRegistry(
       const canonical = canonicalGraphJson(graph);
       const existing = readGraphRow(db, graph.graphId, graph.graphVersion);
       if (existing) {
-        const decoded = decodeExactRow(existing, graph.graphId, graph.graphVersion);
+        const decoded = decodeExactGraphRow(existing, graph.graphId, graph.graphVersion);
         if (!decoded) return { status: "INVALID_GRAPH" };
         if (existing.canonical_json !== canonical) return { status: "CONFLICT" };
         return { status: "REPLAYED", graph: decoded };
@@ -139,7 +96,7 @@ export async function createSqliteGraphDefinitionRegistry(
       }
       const row = readGraphRow(db, graphId, graphVersion);
       if (!row) return { status: "NOT_FOUND" };
-      const graph = decodeExactRow(row, graphId, graphVersion);
+      const graph = decodeExactGraphRow(row, graphId, graphVersion);
       return graph === undefined
         ? { status: "INTEGRITY_ERROR", code: "GRAPH_DEFINITION_INVALID" }
         : { status: "FOUND", graph };
